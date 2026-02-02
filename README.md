@@ -20,7 +20,7 @@ This solution provides a comprehensive validation service for Open Referral UK (
 ### Key Features
 
 - **OpenAPI Validation**: Validates OpenAPI 2.0 (Swagger) and 3.x specifications for structural correctness
-- **Multi-version Schema Support**: Supports HSDS-UK v1.0, v3.0, and v3.1 standards
+- **Multi-version Schema Support**: Supports HSDS-UK v1.0 and v3.0 standards
 - **Automated Endpoint Testing**: Tests all endpoints defined in OpenAPI specs against live APIs
 - **Comprehensive Analysis**: Provides quality metrics, security analysis, and actionable recommendations
 - **Optional Endpoint Support**: Intelligently handles optional endpoints with configurable warning levels
@@ -76,12 +76,13 @@ This solution is built as a modern, cloud-native application with the following 
 
 ## Documentation
 
-For detailed information about specific components:
+For detailed information about specific components, see:
 
-- [Technical Architecture](docs/ARCHITECTURE.md) - Comprehensive technical documentation
-- [Development Setup](docs/DEVELOPMENT%20SETUP.md) - Local development environment setup
-- [Contributing Guide](docs/CONTRIBUTING.md) - How to contribute to the project
-- [Developer Walkthrough](docs/DEVELOPER_WALKTHROUGH.md) - Step-by-step guide for developers
+- [Technical Architecture](https://github.com/tpximpact/OpenReferralApi/wiki/ARCHITECTURE)
+- [Development Setup](https://github.com/tpximpact/OpenReferralApi/wiki/DEVELOPMENT-SETUP)
+- [Contributing Guide](https://github.com/tpximpact/OpenReferralApi/wiki/CONTRIBUTING)
+- [Developer Walkthrough](https://github.com/tpximpact/OpenReferralApi/wiki/DEVELOPER-WALKTHROUGH)
+- [Legacy documentation and design decisions](docs/legacy-documentation-and-design-decisions.md)
 
 ### API Documentation
 
@@ -93,13 +94,13 @@ When running locally in development mode, interactive API documentation is avail
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/tpximpact/mhclg-oruk.git
+   git clone https://github.com/tpximpact/OpenReferralApi.git
    cd OpenReferralApi
    ```
 
 2. **Run with Docker**:
    ```bash
-   docker-compose -f docker-compose.dev.yml up
+   docker-compose up
    ```
 
 3. **Or run with .NET CLI**:
@@ -126,11 +127,11 @@ For questions, discussions, and contributions related to ORUK or the HSDS standa
 
 We welcome contributions from the community! The Open Referral network is built on collaboration and shared expertise.
 
-**For issues specific to this API**, please use the [issues page](https://github.com/tpximpact/mhclg-oruk/issues). Consolidating issues in one place helps us track and respond more efficiently.
+**For issues specific to this API**, please use the [issues page](https://github.com/tpximpact/OpenReferralApi/issues). Consolidating issues in one place helps us track and respond more efficiently.
 
 **For broader HSDS/ORUK standard discussions**, please post to the [community forums](https://forum.openreferral.org/) where the active community can provide support and guidance.
 
-See our [Contributing Guide](docs/CONTRIBUTING.md) for detailed information on how to get started.
+See [legacy documentation and design decisions](docs/legacy-documentation-and-design-decisions.md) for background and notes.
 
 ## License
 
