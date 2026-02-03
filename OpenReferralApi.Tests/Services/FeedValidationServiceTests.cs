@@ -190,8 +190,8 @@ public class FeedValidationServiceTests
         var result = await service.ValidateSingleFeedAsync(feed);
 
         // Assert
-        result.IsUp.Should().BeFalse();
-        result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("Unexpected error");
+        Assert.That(result.IsUp, Is.False);
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Unexpected error"));
     }
 }
