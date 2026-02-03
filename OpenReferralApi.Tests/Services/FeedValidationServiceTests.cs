@@ -1,4 +1,3 @@
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -51,6 +50,27 @@ public class FeedValidationServiceTests
             _loggerMock.Object);
     }
 
+    private FeedValidationService CreateService(out Mock<IMongoCollection<ServiceFeed>> collectionMock)
+    {
+        var mongoClientMock = new Mock<IMongoClient>();
+        var mongoDatabaseMock = new Mock<IMongoDatabase>();
+        collectionMock = new Mock<IMongoCollection<ServiceFeed>>();
+
+        mongoClientMock
+            .Setup(x => x.GetDatabase("test-db", null))
+            .Returns(mongoDatabaseMock.Object);
+
+        mongoDatabaseMock
+            .Setup(x => x.GetCollection<ServiceFeed>("services", null))
+            .Returns(collectionMock.Object);
+
+        return new FeedValidationService(
+            mongoClientMock.Object,
+            _configuration,
+            _validationServiceMock.Object,
+            _loggerMock.Object);
+    }
+
     [Test]
     public async Task ValidateSingleFeedAsync_WithValidFeed_ReturnsSuccessResult()
     {
@@ -73,11 +93,11 @@ public class FeedValidationServiceTests
         var result = await service.ValidateSingleFeedAsync(feed);
 
         // Assert
-        result.IsUp.Should().BeTrue();
-        result.IsValid.Should().BeTrue();
-        result.FeedId.Should().Be("1");
-        result.ErrorMessage.Should().BeNullOrEmpty();
-        result.ResponseTimeMs.Should().BeGreaterThan(1900).And.BeLessThan(2100);
+        Assert.That(result.IsUp, Is.True);
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.FeedId, Is.EqualTo("1"));
+        Assert.That(result.ErrorMessage, Is.Null.Or.Empty);
+        Assert.That(result.ResponseTimeMs, Is.GreaterThan(1900).And.LessThan(2100));
     }
 
     [Test]
@@ -109,10 +129,10 @@ public class FeedValidationServiceTests
         var result = await service.ValidateSingleFeedAsync(feed);
 
         // Assert
-        result.IsUp.Should().BeTrue();
-        result.IsValid.Should().BeFalse();
-        result.ValidationErrorCount.Should().Be(2);
-        result.ErrorMessage.Should().Contain("Invalid path");
+        Assert.That(result.IsUp, Is.True);
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ValidationErrorCount, Is.EqualTo(2));
+        Assert.That(result.ErrorMessage, Does.Contain("Invalid path"));
     }
 
     [Test]
@@ -130,9 +150,9 @@ public class FeedValidationServiceTests
         var result = await service.ValidateSingleFeedAsync(feed);
 
         // Assert
-        result.IsUp.Should().BeFalse();
-        result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("HTTP error");
+        Assert.That(result.IsUp, Is.False);
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("HTTP error"));
     }
 
     [Test]
@@ -150,8 +170,28 @@ public class FeedValidationServiceTests
         var result = await service.ValidateSingleFeedAsync(feed);
 
         // Assert
-        result.IsUp.Should().BeFalse();
-        result.IsValid.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("timed out");
+        Assert.That(result.IsUp, Is.False);
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("timed out"));
+    }
+
+    [Test]
+    public async Task ValidateSingleFeedAsync_WithUnexpectedError_ReturnsDownFeed()
+    {
+        // Arrange
+        var service = CreateService();
+        var feed = new ServiceFeed { Id = "1", UrlField = "https://example.com" };
+
+        _validationServiceMock
+            .Setup(x => x.ValidateOpenApiSpecificationAsync(It.IsAny<OpenApiValidationRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("Unexpected failure"));
+
+        // Act
+        var result = await service.ValidateSingleFeedAsync(feed);
+
+        // Assert
+        Assert.That(result.IsUp, Is.False);
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Unexpected error"));
     }
 }
