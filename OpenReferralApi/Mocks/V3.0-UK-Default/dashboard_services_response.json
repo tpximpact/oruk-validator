@@ -39,7 +39,7 @@
         "label": "Feed passes?",
         "dataType": "oruk:dataType.success"
       },
-      "testDate": {
+      "lastTested": {
         "label": "Last tested",
         "dataType": "oruk:dataType.dateTime"
       }
@@ -52,9 +52,9 @@
           "statusIsUp",
           "statusIsValid",
           "schemaVersion",
-          "testDate"
+          "lastTested"
         ],
-        "sortBy": ["name", "statusOverall", "schemaVersion", "testDate"],
+        "sortBy": ["name", "statusOverall", "schemaVersion", "lastTested"],
         "defaultSortDirection": "ascending",
         "defaultSortBy": "name",
         "showPassingRowsOnly": false,
@@ -67,9 +67,9 @@
           "comment",
           "developer",
           "service",
-          "testDate"
+          "lastTested"
         ],
-        "sortBy": ["name", "publisher", "developer", "testDate"],
+        "sortBy": ["name", "publisher", "developer", "lastTested"],
         "defaultSortDirection": "ascending",
         "defaultSortBy": "name",
         "showPassingRowsOnly": true,
@@ -109,7 +109,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:01:07",
         "url": "/developers/dashboard/1"
       }
@@ -145,7 +145,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:02:07",
         "url": "/developers/dashboard/2"
       }
@@ -181,7 +181,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:03:07",
         "url": "/developers/dashboard/3"
       }
@@ -217,7 +217,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:04:07",
         "url": "/developers/dashboard/4"
       }
@@ -253,7 +253,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:05:07",
         "url": "/developers/dashboard/5"
       }
@@ -289,7 +289,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:06:07",
         "url": "/developers/dashboard/6"
       }
@@ -325,7 +325,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:07:07",
         "url": "/developers/dashboard/7"
       }
@@ -361,7 +361,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:08:07",
         "url": "/developers/dashboard/8"
       }
@@ -397,7 +397,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:09:07",
         "url": "/developers/dashboard/9"
       }
@@ -433,7 +433,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:10:07",
         "url": "/developers/dashboard/10"
       }
@@ -469,7 +469,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:11:07",
         "url": "/developers/dashboard/11"
       }
@@ -505,7 +505,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:12:07",
         "url": "/developers/dashboard/12"
       }
@@ -541,7 +541,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:13:07",
         "url": "/developers/dashboard/13"
       }
@@ -577,7 +577,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:14:07",
         "url": "/developers/dashboard/14"
       }
@@ -613,7 +613,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:15:07",
         "url": "/developers/dashboard/15"
       }
@@ -649,7 +649,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:16:07",
         "url": "/developers/dashboard/16"
       }
@@ -685,7 +685,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:17:07",
         "url": "/developers/dashboard/17"
       }
@@ -721,7 +721,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:18:07",
         "url": "/developers/dashboard/18"
       }
@@ -757,7 +757,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:19:07",
         "url": "/developers/dashboard/19"
       }
@@ -793,7 +793,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:20:07",
         "url": "/developers/dashboard/20"
       }
@@ -829,7 +829,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:21:07",
         "url": "/developers/dashboard/21"
       }
@@ -865,7 +865,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:22:07",
         "url": "/developers/dashboard/22"
       }
@@ -901,7 +901,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:23:07",
         "url": "/developers/dashboard/23"
       }
@@ -937,7 +937,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:24:07",
         "url": "/developers/dashboard/24"
       }
@@ -973,7 +973,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:25:07",
         "url": "/developers/dashboard/25"
       }
@@ -1009,7 +1009,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:26:07",
         "url": "/developers/dashboard/26"
       }
@@ -1045,7 +1045,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:27:07",
         "url": "/developers/dashboard/27"
       }
@@ -1081,7 +1081,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:28:07",
         "url": "/developers/dashboard/28"
       }
@@ -1117,7 +1117,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:29:07",
         "url": "/developers/dashboard/29"
       }
@@ -1153,7 +1153,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:30:07",
         "url": "/developers/dashboard/30"
       }
@@ -1189,7 +1189,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:31:07",
         "url": "/developers/dashboard/31"
       }
@@ -1225,7 +1225,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:32:07",
         "url": "/developers/dashboard/32"
       }
@@ -1261,7 +1261,7 @@
       "statusOverall": {
         "value": 0
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:33:07",
         "url": "/developers/dashboard/33"
       }
@@ -1297,7 +1297,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:34:07",
         "url": "/developers/dashboard/34"
       }
@@ -1333,7 +1333,7 @@
       "statusOverall": {
         "value": 1
       },
-      "testDate": {
+      "lastTested": {
         "value": "2024-08-06T18:35:07",
         "url": "/developers/dashboard/35"
       }
