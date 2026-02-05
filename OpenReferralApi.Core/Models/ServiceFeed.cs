@@ -186,4 +186,55 @@ public class ServiceFeed
 
     [BsonElement("validationErrors")]
     public int? ValidationErrorCount { get; set; }
+
+    [BsonElement("lastTested")]
+    [BsonIgnoreIfNull]
+    [JsonIgnore]
+    public BsonValue? LastTested { get; set; }
+
+    /// <summary>
+    /// Helper property to get lastTested value as DateTime
+    /// </summary>
+    [BsonIgnore]
+    [JsonPropertyName("lastTested")]
+    public DateTime? LastTestedTime
+    {
+        get
+        {
+            if (LastTested == null) return null;
+            if (LastTested.IsValidDateTime) return LastTested.ToUniversalTime();
+            // Handle nested object with value field
+            if (LastTested.IsBsonDocument)
+            {
+                var doc = LastTested.AsBsonDocument;
+                if (doc.Contains("value") && doc["value"].IsValidDateTime)
+                {
+                    return doc["value"].ToUniversalTime();
+                }
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Helper property to get lastTested url as string
+    /// </summary>
+    [BsonIgnore]
+    public string? TestResultsUrl
+    {
+        get
+        {
+            if (LastTested == null) return null;
+            // Handle nested object with url field
+            if (LastTested.IsBsonDocument)
+            {
+                var doc = LastTested.AsBsonDocument;
+                if (doc.Contains("url") && doc["url"].IsString)
+                {
+                    return doc["url"].AsString;
+                }
+            }
+            return null;
+        }
+    }
 }
