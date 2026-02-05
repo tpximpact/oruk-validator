@@ -115,6 +115,14 @@ public class FeedValidationService : IFeedValidationService
       updates.Add(updateBuilder.Set(f => f.ResponseTimeMs, responseTimeMs));
       updates.Add(updateBuilder.Set(f => f.ValidationErrorCount, validationErrorCount));
 
+      // Update lastTested with current timestamp and results URL
+      var lastTestedDoc = new BsonDocument
+      {
+        { "value", DateTime.UtcNow },
+        { "url", $"/developers/dashboard/{feedId}" }
+      };
+      updates.Add(updateBuilder.Set(f => f.LastTested, lastTestedDoc));
+
       var combinedUpdate = updateBuilder.Combine(updates);
       await _servicesCollection.UpdateOneAsync(filter, combinedUpdate, cancellationToken: cancellationToken);
 
