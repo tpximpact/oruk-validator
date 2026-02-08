@@ -119,7 +119,14 @@ public class JsonSchemaResolverService : IJsonSchemaResolverService
             var resolver = new JSchemaUrlResolver();
 
             // First fetch the schema content manually since JSchema.Load doesn't support async loading from URI
-            var response = await _httpClient.GetStringAsync(schemaUri, cancellationToken);
+            var request = new HttpRequestMessage(HttpMethod.Get, schemaUri);
+            var bypassToken = Environment.GetEnvironmentVariable("x-vercel-protection-bypass");
+            if (!string.IsNullOrEmpty(bypassToken))
+            {
+                request.Headers.Add("x-vercel-protection-bypass", bypassToken);
+            }
+            var httpResponse = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
 
             // Load schema from JSON string with resolver settings
             var settings = new JSchemaReaderSettings
