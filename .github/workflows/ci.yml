@@ -22,6 +22,12 @@ permissions:
   security-events: write   # for Trivy SARIF upload
   actions: read
 
+permissions:
+  contents: read
+  packages: write          # for pushing to GHCR
+  security-events: write   # for Trivy SARIF upload
+  actions: read
+
 jobs:
   build-and-test:
     name: Build and Test (.NET)
