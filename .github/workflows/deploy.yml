@@ -1,75 +1,113 @@
 name: Deploy to Heroku
 
 on:
-  push:
-    branches: [main, staging]
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches: [staging, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  packages: read   # To pull from GHCR
+  contents: read
+
 jobs:
-  # deploy-staging job to deploy to Heroku staging environment
-  # this job depends on security-scan and code-quality jobs
-  # it does not depend on docker-build or zap-scan jobs
-  # because the zap scan is only run when a pull request is made to main branch
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/staging'
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'staging'
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v4
 
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
 
-      - name: Set Heroku stack to container
+      - name: Login to Heroku Container Registry
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-        run: heroku stack:set container --app staging-oruk-api
+        run: heroku container:login
 
-      - name: Deploy to Heroku Staging
-        uses: akhileshns/heroku-deploy@v3.14.15
-        with:
-          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-          heroku_app_name: staging-oruk-api
-          heroku_email: ${{ vars.HEROKU_EMAIL }}
-          usedocker: true
-          healthcheck: ${{ vars.STAGING_HEALTH_ENDPOINT }}
+      - name: Ensure container stack (staging)
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: heroku stack:set container --app ${{ vars.HEROKU_STAGING_APP }}
 
-  # deploy-production job to deploy to Heroku production environment
-  # this job depends on security-scan and code-quality jobs
-  # it runs only on pushes to main branch
-  # it does not depend on docker-build or zap-scan jobs
-  # because all of those checks should have been done already on the pull request to main
+      - name: Pull tested image from GHCR & deploy to Heroku Staging
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+        run: |
+          SHORT_SHA=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)
+          echo "Deploying tested image: ${IMAGE_NAME}:sha-${SHORT_SHA} → ${{ vars.HEROKU_STAGING_APP }}"
+
+          docker pull ${IMAGE_NAME}:sha-${SHORT_SHA}
+
+          echo "Pushing to Heroku..."
+          heroku container:push web --app ${{ vars.HEROKU_STAGING_APP }} --tag sha-${SHORT_SHA}
+
+          echo "Releasing..."
+          heroku container:release web --app ${{ vars.HEROKU_STAGING_APP }}
+
+          echo "Health check..."
+          sleep 12
+          curl --fail "${{ vars.STAGING_HEALTH_ENDPOINT }}" || echo "⚠️ Health check failed – check Heroku logs"
+
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v4
 
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
 
-      - name: Deploy to Heroku Production
-        uses: akhileshns/heroku-deploy@v3.14.15
-        with:
-          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-          heroku_app_name: ${{ vars.HEROKU_APP_NAME }}
-          heroku_email: ${{vars.HEROKU_EMAIL }}
-          usedocker: true
-          healthcheck: ${{ vars.HEALTH_ENDPOINT }}
+      - name: Login to Heroku Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: heroku container:login
+
+      - name: Ensure container stack (production)
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: heroku stack:set container --app ${{ vars.HEROKU_PROD_APP }}
+
+      - name: Pull tested image from GHCR & deploy to Heroku Production
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+        run: |
+          SHORT_SHA=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)
+          echo "Deploying tested image: ${IMAGE_NAME}:sha-${SHORT_SHA} → ${{ vars.HEROKU_PROD_APP }}"
+
+          docker pull ${IMAGE_NAME}:sha-${SHORT_SHA}
+
+          echo "Pushing to Heroku..."
+          heroku container:push web --app ${{ vars.HEROKU_PROD_APP }} --tag sha-${SHORT_SHA}
+
+          echo "Releasing..."
+          heroku container:release web --app ${{ vars.HEROKU_PROD_APP }}
+
+          echo "Health check..."
+          sleep 12
+          curl --fail "${{ vars.HEALTH_ENDPOINT }}" || echo "⚠️ Health check failed – check Heroku logs"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2.5.0
         with:
-          tag_name: v${{ github.run_number }}
-          name: Release v${{ github.run_number }}
+          tag_name: v${{ github.event.workflow_run.run_number }}
+          name: Release v${{ github.event.workflow_run.run_number }}
           draft: false
           prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
