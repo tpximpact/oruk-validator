@@ -1,14 +1,15 @@
 version: 2
+
 updates:
-  # Enable version updates for NuGet
+  # ── .NET / NuGet ─────────────────────────────────────────────────────────────
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 10
-    reviewers:
-      - "tpximpact"
+      time: "04:00"           # Early morning UTC — reduces merge conflicts
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 12
     labels:
       - "dependencies"
       - "nuget"
@@ -19,6 +20,7 @@ updates:
       microsoft-packages:
         patterns:
           - "Microsoft.*"
+          - "System.*"
       health-checks:
         patterns:
           - "AspNetCore.HealthChecks.*"
@@ -27,27 +29,52 @@ updates:
           - "NUnit*"
           - "Moq"
           - "coverlet.*"
+          - "xunit*"
+          - "FluentAssertions"
+          - "Shouldly"
+          - "Testcontainers*"
+      analyzers-and-tooling:
+        patterns:
+          - "*.Analyzers"
+          - "StyleCop.*"
+          - "Roslynator.*"
+          - "SonarAnalyzer.*"
+          - "Meziantou.*"
+          - "Refit*"
+          - "Polly"
 
-  # Enable version updates for Docker
+  # ── Docker ───────────────────────────────────────────────────────────────────
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "04:00"
+      timezone: "Etc/UTC"
     labels:
       - "dependencies"
       - "docker"
     commit-message:
       prefix: "chore"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
 
-  # Enable version updates for GitHub Actions
+  # ── GitHub Actions ───────────────────────────────────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "04:00"
+      timezone: "Etc/UTC"
     labels:
       - "dependencies"
       - "github-actions"
     commit-message:
       prefix: "ci"
+    groups:
+      github-actions-updates:
+        patterns:
+          - "*"
