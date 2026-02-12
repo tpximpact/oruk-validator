@@ -133,14 +133,14 @@ public class SchemaResolverService : ISchemaResolverService
       var cacheKey = GenerateCacheKey(schemaUrl);
       if (_memoryCache.TryGetValue<string>(cacheKey, out var cachedContent) && cachedContent != null)
       {
-        _logger.LogDebug("Retrieved schema from cache: {SchemaUrl}", schemaUrl);
+        _logger.LogDebug("Retrieved schema from cache: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
         return JsonNode.Parse(cachedContent);
       }
     }
 
     try
     {
-      _logger.LogDebug("Fetching remote schema: {SchemaUrl}", schemaUrl);
+      _logger.LogDebug("Fetching remote schema: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
       
       using var request = new HttpRequestMessage(HttpMethod.Get, schemaUrl);
       
@@ -179,14 +179,14 @@ public class SchemaResolverService : ISchemaResolverService
         }
 
         _memoryCache.Set(cacheKey, content, cacheEntryOptions);
-        _logger.LogDebug("Cached schema: {SchemaUrl} (expires in {Minutes} minutes)", schemaUrl, _cacheOptions.ExpirationMinutes);
+        _logger.LogDebug("Cached schema: {SchemaUrl} (expires in {Minutes} minutes)", SanitizeUrlForLogging(schemaUrl), _cacheOptions.ExpirationMinutes);
       }
 
       return JsonNode.Parse(content);
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to fetch remote schema: {SchemaUrl}", schemaUrl);
+      _logger.LogError(ex, "Failed to fetch remote schema: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
       throw;
     }
   }
@@ -269,6 +269,40 @@ public class SchemaResolverService : ISchemaResolverService
   private string GenerateCacheKey(string schemaUrl)
   {
     return $"schema:{schemaUrl}";
+  }
+
+  /// <summary>
+  /// Sanitizes a URL for safe logging by removing query parameters and fragments
+  /// </summary>
+  private static string SanitizeUrlForLogging(string url)
+  {
+    if (string.IsNullOrEmpty(url))
+      return url;
+
+    try
+    {
+      if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+      {
+        // Return URL without query string or fragment
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
+      }
+      // For relative URLs, just remove query and fragment
+      var questionMarkIndex = url.IndexOf('?');
+      var hashIndex = url.IndexOf('#');
+      var endIndex = url.Length;
+      
+      if (questionMarkIndex > 0)
+        endIndex = Math.Min(endIndex, questionMarkIndex);
+      if (hashIndex > 0)
+        endIndex = Math.Min(endIndex, hashIndex);
+      
+      return url[..endIndex];
+    }
+    catch
+    {
+      // If parsing fails, return truncated version
+      return url.Length > 100 ? url[..100] + "..." : url;
+    }
   }
 
   private JsonNode? ResolveJsonPointer(string pointer)
@@ -418,7 +452,7 @@ public class SchemaResolverService : ISchemaResolverService
     // Detect circular references
     if (visitedRefs.Contains(resolvedUrl))
     {
-      _logger.LogWarning("Circular reference detected: {ResolvedUrl}", resolvedUrl);
+      _logger.LogWarning("Circular reference detected: {ResolvedUrl}", SanitizeUrlForLogging(resolvedUrl));
       return JsonNode.Parse($"{{\"$ref\":\"{refUrl}\"}}");
     }
 
@@ -447,7 +481,7 @@ public class SchemaResolverService : ISchemaResolverService
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Error loading schema from {ResolvedUrl}", resolvedUrl);
+      _logger.LogError(ex, "Error loading schema from {ResolvedUrl}", SanitizeUrlForLogging(resolvedUrl));
       visitedRefs.Remove(resolvedUrl);
       return JsonNode.Parse($"{{\"$ref\":\"{refUrl}\"}}");
     }
