@@ -1,0 +1,40 @@
+name: Dependabot - Auto-merge safe updates
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot-auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2.5.0
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Approve & enable auto-merge (safe updates only)
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          (
+            steps.metadata.outputs.update-type == 'version-update:semver-minor' &&
+            (
+              contains(steps.metadata.outputs.dependency-names, 'Microsoft.') ||
+              contains(steps.metadata.outputs.dependency-names, 'AspNetCore.HealthChecks.')
+            )
+          )
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

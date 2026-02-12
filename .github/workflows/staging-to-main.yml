@@ -1,0 +1,65 @@
+name: Enforce staging → main only
+
+# Runs on every pull request targeting main
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write      # to post comments & set status
+  statuses: write           # to create commit status
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if PR is not from staging
+        if: github.head_ref != 'staging'
+        run: |
+          echo "Error: Merges into 'main' are only allowed from the 'staging' branch."
+          echo "Current source branch: ${{ github.head_ref }}"
+          exit 1
+
+      - name: Success status (from staging)
+        if: success()
+        uses: actions/github-script@v8.0.0
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'success',
+              context: 'staging-to-main-only',
+              description: 'Source branch is staging ✓ Allowed to merge'
+            })
+
+      - name: Fail status + comment (not from staging)
+        if: failure()
+        uses: actions/github-script@v8.0.0
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'failure',
+              context: 'staging-to-main-only',
+              description: 'Blocked: PR must come from staging branch'
+            });
+
+            // Optional: add a helpful comment on the PR
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                '🚫 **Merge blocked**',
+                '',
+                'Pull requests targeting `main` are **only allowed from the `staging` branch**.',
+                'Please merge your changes into `staging` first, then open a PR from `staging` → `main`.',
+                '',
+                'Current source branch: **${{ github.head_ref }}**'
+              ].join('\n')
+            });

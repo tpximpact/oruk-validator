@@ -1,6 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Linq;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Schema;
 using OpenReferralApi.Core.Models;
@@ -60,6 +63,8 @@ public class SchemaResolverService : ISchemaResolverService
   private readonly Dictionary<string, JsonNode?> _refCache = new();
   private readonly HttpClient _httpClient;
   private readonly ILogger<SchemaResolverService> _logger;
+  private readonly IMemoryCache _memoryCache;
+  private readonly CacheOptions _cacheOptions;
   private JsonNode? _rootDocument;
   private string? _baseUri;
   private DataSourceAuthentication? _auth;
@@ -69,10 +74,18 @@ public class SchemaResolverService : ISchemaResolverService
   /// </summary>
   /// <param name="httpClient">HTTP client for fetching remote schemas.</param>
   /// <param name="logger">Logger instance.</param>
-  public SchemaResolverService(HttpClient httpClient, ILogger<SchemaResolverService> logger)
+  /// <param name="memoryCache">Memory cache for persistent schema caching.</param>
+  /// <param name="cacheOptions">Cache configuration options.</param>
+  public SchemaResolverService(
+    HttpClient httpClient,
+    ILogger<SchemaResolverService> logger,
+    IMemoryCache memoryCache,
+    IOptions<CacheOptions> cacheOptions)
   {
     _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+    _cacheOptions = cacheOptions?.Value ?? throw new ArgumentNullException(nameof(cacheOptions));
   }
 
   /// <summary>
@@ -115,9 +128,20 @@ public class SchemaResolverService : ISchemaResolverService
 
   private async Task<JsonNode?> LoadRemoteSchemaAsync(string schemaUrl)
   {
+    // Check persistent cache first if caching is enabled
+    if (_cacheOptions.Enabled)
+    {
+      var cacheKey = GenerateCacheKey(schemaUrl);
+      if (_memoryCache.TryGetValue<string>(cacheKey, out var cachedContent) && cachedContent != null)
+      {
+        _logger.LogDebug("Retrieved schema from cache: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
+        return JsonNode.Parse(cachedContent);
+      }
+    }
+
     try
     {
-      _logger.LogDebug("Fetching remote schema: {SchemaUrl}", schemaUrl);
+      _logger.LogDebug("Fetching remote schema: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
       
       using var request = new HttpRequestMessage(HttpMethod.Get, schemaUrl);
       
@@ -130,11 +154,40 @@ public class SchemaResolverService : ISchemaResolverService
       var response = await _httpClient.SendAsync(request);
       response.EnsureSuccessStatusCode();
       var content = await response.Content.ReadAsStringAsync();
+
+      // Store in persistent cache if caching is enabled
+      if (_cacheOptions.Enabled)
+      {
+        var cacheKey = GenerateCacheKey(schemaUrl);
+        var cacheEntryOptions = new MemoryCacheEntryOptions
+        {
+          Size = content.Length,
+          Priority = CacheItemPriority.Normal
+        };
+
+        // Configure expiration
+        if (_cacheOptions.ExpirationMinutes > 0)
+        {
+          if (_cacheOptions.UseSlidingExpiration)
+          {
+            cacheEntryOptions.SlidingExpiration = TimeSpan.FromMinutes(_cacheOptions.SlidingExpirationMinutes);
+            cacheEntryOptions.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_cacheOptions.ExpirationMinutes);
+          }
+          else
+          {
+            cacheEntryOptions.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_cacheOptions.ExpirationMinutes);
+          }
+        }
+
+        _memoryCache.Set(cacheKey, content, cacheEntryOptions);
+        _logger.LogDebug("Cached schema: {SchemaUrl} (expires in {Minutes} minutes)", SanitizeUrlForLogging(schemaUrl), _cacheOptions.ExpirationMinutes);
+      }
+
       return JsonNode.Parse(content);
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to fetch remote schema: {SchemaUrl}", schemaUrl);
+      _logger.LogError(ex, "Failed to fetch remote schema: {SchemaUrl}", SanitizeUrlForLogging(schemaUrl));
       throw;
     }
   }
@@ -209,6 +262,63 @@ public class SchemaResolverService : ISchemaResolverService
   {
     // Check if this is an internal JSON pointer reference
     return refUrl.StartsWith("#/");
+  }
+
+  /// <summary>
+  /// Generates a cache key for a schema URL
+  /// </summary>
+  private string GenerateCacheKey(string schemaUrl)
+  {
+    return $"schema:{schemaUrl}";
+  }
+
+  /// <summary>
+  /// Sanitizes a URL for safe logging by removing query parameters and fragments
+  /// and stripping any control characters (including newlines) that could be used
+  /// for log-forging attacks.
+  /// </summary>
+  public static string SanitizeUrlForLogging(string url)
+  {
+    if (string.IsNullOrEmpty(url))
+      return url;
+
+    // Normalize whitespace and strip control characters (including CR/LF) to prevent log forging
+    var trimmed = url.Trim();
+    var cleaned = new string(trimmed.Where(c => !char.IsControl(c)).ToArray());
+
+    // Optionally limit length to avoid log flooding/obfuscation with attacker-controlled data
+    const int maxLength = 2048;
+    if (cleaned.Length > maxLength)
+    {
+      cleaned = cleaned.Substring(0, maxLength) + "...(truncated)";
+    }
+
+    return cleaned;
+
+    try
+    {
+      if (Uri.TryCreate(cleaned, UriKind.Absolute, out var uri))
+      {
+        // Return URL without query string or fragment
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
+      }
+      // For relative URLs, just remove query and fragment
+      var questionMarkIndex = url.IndexOf('?');
+      var hashIndex = url.IndexOf('#');
+      var endIndex = url.Length;
+      
+      if (questionMarkIndex > 0)
+        endIndex = Math.Min(endIndex, questionMarkIndex);
+      if (hashIndex > 0)
+        endIndex = Math.Min(endIndex, hashIndex);
+      
+      return url[..endIndex];
+    }
+    catch
+    {
+      // If parsing fails, return truncated version
+      return url.Length > 100 ? url[..100] + "..." : url;
+    }
   }
 
   private JsonNode? ResolveJsonPointer(string pointer)
@@ -358,7 +468,7 @@ public class SchemaResolverService : ISchemaResolverService
     // Detect circular references
     if (visitedRefs.Contains(resolvedUrl))
     {
-      _logger.LogWarning("Circular reference detected: {ResolvedUrl}", resolvedUrl);
+      _logger.LogWarning("Circular reference detected: {ResolvedUrl}", SanitizeUrlForLogging(resolvedUrl));
       return JsonNode.Parse($"{{\"$ref\":\"{refUrl}\"}}");
     }
 
@@ -387,7 +497,7 @@ public class SchemaResolverService : ISchemaResolverService
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Error loading schema from {ResolvedUrl}", resolvedUrl);
+      _logger.LogError(ex, "Error loading schema from {ResolvedUrl}", SanitizeUrlForLogging(resolvedUrl));
       visitedRefs.Remove(resolvedUrl);
       return JsonNode.Parse($"{{\"$ref\":\"{refUrl}\"}}");
     }
