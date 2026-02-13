@@ -2,8 +2,7 @@ version: 2
 
 updates:
   # ── .NET / NuGet ─────────────────────────────────────────────────────────────
-  - package-ecosystem: 
-    target-branch: "staging"
+  - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -46,7 +45,6 @@ updates:
 
   # ── Docker ───────────────────────────────────────────────────────────────────
   - package-ecosystem: "docker"
-    target-branch: "staging"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -65,7 +63,6 @@ updates:
 
   # ── GitHub Actions ───────────────────────────────────────────────────────────
   - package-ecosystem: "github-actions"
-    target-branch: "staging"
     directory: "/"
     schedule:
       interval: "weekly"
