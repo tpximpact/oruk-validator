@@ -269,7 +269,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull Docker image
-        run: docker pull ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:sha-${{ github.sha }}
+        run: docker pull ${{ needs.docker-build.outputs.image_ref }}
 
       - name: Create Docker network
         run: docker network create zap-test-network
@@ -279,7 +279,7 @@ jobs:
           docker run -d --name test-app \
             --network zap-test-network \
             -p 8080:80 \
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:sha-${{ github.sha }}
+            ${{ needs.docker-build.outputs.image_ref }}
 
           # Wait for application to be ready
           echo "Waiting for application to start..."
