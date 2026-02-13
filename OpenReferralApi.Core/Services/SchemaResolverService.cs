@@ -284,7 +284,25 @@ public class SchemaResolverService : ISchemaResolverService
 
     // Normalize whitespace and strip control characters (including CR/LF) to prevent log forging
     var trimmed = url.Trim();
-    var cleaned = new string(trimmed.Where(c => !char.IsControl(c)).ToArray());
+    // Allow only a conservative set of URL-safe printable characters; replace others with '?'
+    var cleanedChars = trimmed
+      .Where(c => !char.IsControl(c))
+      .Select(c =>
+      {
+        // Unreserved and common reserved URL characters
+        const string allowedPunctuation = "-._~:/?#[]@!$&'()*+,;=%";
+        if ((c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') ||
+            allowedPunctuation.IndexOf(c) >= 0)
+        {
+          return c;
+        }
+        // Replace any unusual characters with a placeholder to keep logs safe and readable
+        return '?';
+      })
+      .ToArray();
+    var cleaned = new string(cleanedChars);
 
     // Optionally limit length to avoid log flooding/obfuscation with attacker-controlled data
     const int maxLength = 2048;
