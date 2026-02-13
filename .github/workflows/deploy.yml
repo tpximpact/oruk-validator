@@ -13,7 +13,7 @@ concurrency:
 
 permissions:
   packages: read   # To pull from GHCR
-  contents: read
+  contents: write  # To create GitHub releases
 
 jobs:
   deploy-staging:
@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.actor.login != 'dependabot[bot]' &&
       github.event.workflow_run.head_branch == 'staging'
 
     steps:
@@ -53,9 +55,12 @@ jobs:
 
           docker pull ${IMAGE_NAME}:sha-${SHORT_SHA}
 
-          echo "Pushing to Heroku..."
-          heroku container:push web --app ${{ vars.HEROKU_STAGING_APP }} --tag sha-${SHORT_SHA}
+          # Tag the image for Heroku
+          docker tag ${IMAGE_NAME}:sha-${SHORT_SHA} registry.heroku.com/${{ vars.HEROKU_STAGING_APP }}/web:latest
 
+          echo "Pushing to Heroku..."
+          heroku container:push web --app ${{ vars.HEROKU_STAGING_APP }}
+          
           echo "Releasing..."
           heroku container:release web --app ${{ vars.HEROKU_STAGING_APP }}
 
@@ -68,6 +73,8 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.actor.login != 'dependabot[bot]' &&
       github.event.workflow_run.head_branch == 'main'
 
     steps:
@@ -101,8 +108,10 @@ jobs:
           docker pull ${IMAGE_NAME}:sha-${SHORT_SHA}
 
           echo "Pushing to Heroku..."
-          heroku container:push web --app ${{ vars.HEROKU_PROD_APP }} --tag sha-${SHORT_SHA}
+          docker tag ${IMAGE_NAME}:sha-${SHORT_SHA} registry.heroku.com/${{ vars.HEROKU_PROD_APP }}/web:latest
 
+          heroku container:push web --app ${{ vars.HEROKU_PROD_APP }}
+          
           echo "Releasing..."
           heroku container:release web --app ${{ vars.HEROKU_PROD_APP }}
 
