@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   check-source-branch:
+    name: staging-to-main-only
     runs-on: ubuntu-latest
     steps:
       - name: Fail if PR is not from staging
