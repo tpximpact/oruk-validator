@@ -300,22 +300,22 @@ public class SchemaResolverService : ISchemaResolverService
         // Return URL without query string or fragment
         return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
       }
-      // For relative URLs, just remove query and fragment
-      var questionMarkIndex = url.IndexOf('?');
-      var hashIndex = url.IndexOf('#');
-      var endIndex = url.Length;
+      // For relative URLs, just remove query and fragment from the cleaned value
+      var questionMarkIndex = cleaned.IndexOf('?');
+      var hashIndex = cleaned.IndexOf('#');
+      var endIndex = cleaned.Length;
       
       if (questionMarkIndex > 0)
         endIndex = Math.Min(endIndex, questionMarkIndex);
       if (hashIndex > 0)
         endIndex = Math.Min(endIndex, hashIndex);
       
-      return url[..endIndex];
+      return cleaned[..endIndex];
     }
     catch
     {
-      // If parsing fails, return truncated version
-      return url.Length > 100 ? url[..100] + "..." : url;
+      // If parsing fails, return truncated version of the cleaned value
+      return cleaned.Length > 100 ? cleaned[..100] + "..." : cleaned;
     }
   }
 
