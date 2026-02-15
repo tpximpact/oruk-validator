@@ -275,24 +275,8 @@ public class JsonValidatorService : IJsonValidatorService
 
         try
         {
-            // Parse JSON to validate format
-            var jsonNode = JsonNode.Parse(jsonData);
-            if (jsonNode == null)
-            {
-                errors.Add(new ValidationError
-                {
-                    Path = "",
-                    Message = "Invalid JSON: null or empty document",
-                    ErrorCode = "INVALID_JSON",
-                    Severity = "Error"
-                });
-                return Task.FromResult(errors);
-            }
-
-            // Perform validation using JsonSchema.Net
-            // Convert JsonNode to JsonElement for schema validation
-            var jsonString = JsonSerializer.Serialize(jsonNode);
-            using var doc = JsonDocument.Parse(jsonString);
+            // Parse JSON directly as JsonDocument for validation (avoid double serialization)
+            using var doc = JsonDocument.Parse(jsonData);
             var validationResults = schema.Evaluate(doc.RootElement, new Json.Schema.EvaluationOptions
             {
                 OutputFormat = Json.Schema.OutputFormat.List
