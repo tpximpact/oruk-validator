@@ -59,6 +59,10 @@ public class JsonValidatorServiceTests
             .Setup(service => service.CreateSchemaFromJsonAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string schemaJson, CancellationToken ct) => JsonSchema.FromText(schemaJson));
 
+        _schemaResolverServiceMock
+            .Setup(service => service.ResolveAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DataSourceAuthentication?>()))
+            .ReturnsAsync((string json, string? baseUri, DataSourceAuthentication? auth) => json);
+
         // Setup JsonSerializationOptionsProvider mock
         _jsonSerializationOptionsProviderMock
             .Setup(provider => provider.PrettyPrintOptions)

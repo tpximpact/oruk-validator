@@ -160,8 +160,18 @@ public class JsonValidatorService : IJsonValidatorService
             // Basic schema validation
             var schemaValidationErrors = new List<ValidationError>();
 
-            // Note: JsonSchema.Net doesn't have direct type checking like JSchema
-            // Additional schema validation could be added here if needed
+            // Check if schema has a type property
+            var schemaNode = JsonNode.Parse(schemaJson);
+            if (schemaNode is JsonObject schemaObject && !schemaObject.ContainsKey("type"))
+            {
+                schemaValidationErrors.Add(new ValidationError
+                {
+                    Path = "",
+                    Message = "Schema is missing required 'type' property",
+                    ErrorCode = "MISSING_TYPE",
+                    Severity = "Error"
+                });
+            }
 
             result.IsValid = !schemaValidationErrors.Any();
             result.Errors = schemaValidationErrors;
@@ -243,8 +253,11 @@ public class JsonValidatorService : IJsonValidatorService
                 response.EnsureSuccessStatusCode();
                 var schemaJson = await response.Content.ReadAsStringAsync(ct);
 
-                // Pass the validated URI as documentUri so JsonSchema can resolve relative references
-                return await _schemaResolverService.CreateSchemaFromJsonAsync(schemaJson, validatedUri.ToString(), null, ct);
+                // Resolve all $ref references before creating the schema to prevent RefResolutionException during evaluation
+                var resolvedSchemaJson = await _schemaResolverService.ResolveAsync(schemaJson, validatedUri.ToString());
+
+                // Create schema from the fully resolved JSON
+                return await _schemaResolverService.CreateSchemaFromJsonAsync(resolvedSchemaJson, validatedUri.ToString(), null, ct);
             }
             catch (Exception ex)
             {
@@ -259,7 +272,9 @@ public class JsonValidatorService : IJsonValidatorService
         try
         {
             var schemaJson = JsonSerializer.Serialize(schema);
-            return await _schemaResolverService.CreateSchemaFromJsonAsync(schemaJson);
+            // Resolve all $ref references before creating the schema to prevent RefResolutionException during evaluation
+            var resolvedSchemaJson = await _schemaResolverService.ResolveAsync(schemaJson);
+            return await _schemaResolverService.CreateSchemaFromJsonAsync(resolvedSchemaJson);
         }
         catch (Exception ex)
         {
@@ -289,13 +304,14 @@ public class JsonValidatorService : IJsonValidatorService
                 foreach (var error in failedDetails)
                 {
                     var errorPath = error.InstanceLocation.ToString();
-                    var errorMessage = "Validation failed at " + errorPath;
+                    var errorMessage = BuildValidationMessage(error, errorPath);
+                    var errorCode = ExtractErrorCode(error);
                     
                     errors.Add(new ValidationError
                     {
                         Path = errorPath,
                         Message = errorMessage,
-                        ErrorCode = "VALIDATION_ERROR",
+                        ErrorCode = errorCode,
                         Severity = "Error"
                     });
                 }
@@ -323,6 +339,118 @@ public class JsonValidatorService : IJsonValidatorService
         }
 
         return Task.FromResult(errors);
+    }
+
+    private static string BuildValidationMessage(EvaluationResults results, string errorPath)
+    {
+        var errorDetails = FormatValidationErrors(results);
+        if (!string.IsNullOrWhiteSpace(errorDetails))
+        {
+            return errorDetails;
+        }
+
+        // If no specific error details, try to build a message from schema location
+        var schemaKeyword = GetSchemaKeywordFromResults(results);
+        if (!string.IsNullOrWhiteSpace(schemaKeyword))
+        {
+            return string.IsNullOrWhiteSpace(errorPath)
+                ? $"Failed {schemaKeyword} validation"
+                : $"Failed {schemaKeyword} validation at {errorPath}";
+        }
+
+        return string.IsNullOrWhiteSpace(errorPath)
+            ? "Validation failed."
+            : "Validation failed at " + errorPath;
+    }
+
+    private static string? FormatValidationErrors(EvaluationResults results)
+    {
+        if (results.Errors == null || results.Errors.Count == 0)
+        {
+            return null;
+        }
+
+        var errorMessages = results.Errors
+            .Select(kvp => 
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Value))
+                {
+                    return kvp.Key;
+                }
+                
+                // Clean up error message format
+                var message = kvp.Value;
+                if (message.StartsWith("\"") && message.EndsWith("\""))
+                {
+                    message = message.Trim('"');
+                }
+                
+                return $"{kvp.Key}: {message}";
+            })
+            .ToArray();
+
+        return errorMessages.Length == 0 ? null : string.Join("; ", errorMessages);
+    }
+
+    private static string? GetSchemaKeywordFromResults(EvaluationResults results)
+    {
+        // Try to extract the schema keyword from the schema location
+        if (results.SchemaLocation != null)
+        {
+            var schemaPath = results.SchemaLocation.ToString();
+            var parts = schemaPath.Split('/');
+            if (parts.Length > 0)
+            {
+                var keyword = parts.LastOrDefault();
+                if (!string.IsNullOrWhiteSpace(keyword) && keyword != "#")
+                {
+                    return keyword.ToLowerInvariant();
+                }
+            }
+        }
+
+        // Fallback: look for keywords in error dictionary
+        if (results.Errors?.Count > 0)
+        {
+            var firstKeyword = results.Errors.Keys.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(firstKeyword))
+            {
+                return firstKeyword.ToLowerInvariant();
+            }
+        }
+
+        return null;
+    }
+
+    private static string ExtractErrorCode(EvaluationResults results)
+    {
+        // Map schema keywords to error codes
+        if (results.Errors?.Count > 0)
+        {
+            var keyword = results.Errors.Keys.First();
+            return keyword switch
+            {
+                "required" => "REQUIRED_FIELD_MISSING",
+                "type" => "INVALID_TYPE",
+                "enum" => "INVALID_VALUE",
+                "minimum" => "VALUE_TOO_SMALL",
+                "maximum" => "VALUE_TOO_LARGE",
+                "pattern" => "INVALID_FORMAT",
+                "minLength" => "STRING_TOO_SHORT",
+                "maxLength" => "STRING_TOO_LONG",
+                "minItems" => "ARRAY_TOO_SHORT",
+                "maxItems" => "ARRAY_TOO_LONG",
+                "additionalProperties" => "UNEXPECTED_PROPERTY",
+                "oneOf" => "SCHEMA_MISMATCH",
+                "anyOf" => "NO_SCHEMA_MATCH",
+                "allOf" => "SCHEMA_MISMATCH",
+                "not" => "SCHEMA_MISMATCH",
+                "ref" => "SCHEMA_REFERENCE_ERROR",
+                _ => "VALIDATION_ERROR"
+            };
+        }
+
+        return "VALIDATION_ERROR";
     }
 
     private async Task<object> FetchJsonDataFromUrlAsync(string dataUrl, ValidationOptions? options, CancellationToken cancellationToken)
