@@ -42,10 +42,18 @@ jobs:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: heroku stack:set container --app ${{ vars.HEROKU_STAGING_APP }}
 
+      - name: Prepare lowercase image name
+        id: lowercase
+        run: |
+          repo_owner="${{ github.repository_owner }}"
+          repo_name="${{ github.event.repository.name }}"
+          echo "repo_owner=$(echo "$repo_owner" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: Pull tested image from GHCR & deploy to Heroku Staging
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          IMAGE_NAME: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
         run: |
           SHORT_SHA=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)
           echo "Deploying tested image: ${IMAGE_NAME}:sha-${SHORT_SHA} → ${{ vars.HEROKU_STAGING_APP }}"
@@ -94,10 +102,18 @@ jobs:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: heroku stack:set container --app ${{ vars.HEROKU_PROD_APP }}
 
+      - name: Prepare lowercase image name
+        id: lowercase
+        run: |
+          repo_owner="${{ github.repository_owner }}"
+          repo_name="${{ github.event.repository.name }}"
+          echo "repo_owner=$(echo "$repo_owner" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: Pull tested image from GHCR & deploy to Heroku Production
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          IMAGE_NAME: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
         run: |
           SHORT_SHA=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)
           echo "Deploying tested image: ${IMAGE_NAME}:sha-${SHORT_SHA} → ${{ vars.HEROKU_PROD_APP }}"
