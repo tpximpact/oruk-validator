@@ -160,7 +160,7 @@ jobs:
         with:
           images: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
           tags: |
-            type=sha,format=short
+            type=sha,format=short,value=${{ github.event.pull_request.head.sha || github.sha }}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
@@ -169,15 +169,11 @@ jobs:
       - name: Record image reference
         id: image_ref
         run: |
-          tags_raw="${{ steps.meta.outputs.tags }}"
-          image_ref=$(echo "$tags_raw" | tr ',' '\n' | grep ':sha-' | head -n 1)
-
-          if [ -z "$image_ref" ]; then
-            image_ref="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}:sha-${{ github.sha }}"
-          fi
-
-          echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
-
+          REAL_SHA="${{ github.event.pull_request.head.sha }}"
+          SHORT_SHA=$(echo $REAL_SHA | cut -c1-7)
+          
+          echo "image_ref=ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          
       - name: Build and push Docker image
         uses: docker/build-push-action@v6.19.2
         with:

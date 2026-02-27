@@ -46,19 +46,22 @@ jobs:
       - name: Pull tested image from GHCR & deploy to Heroku Production
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          IMAGE_NAME: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
         run: |
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "Deploying tested image: ${IMAGE_NAME}:sha-${SHORT_SHA} → ${{ vars.HEROKU_PROD_APP }}"
+          IMAGE_TAG="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}:sha-${SHORT_SHA}"
+          
+          echo "Deploying tested image: ${IMAGE_TAG} → ${{ vars.HEROKU_PROD_APP }}"
 
-          # Login to GHCR
+          # Logging in to GHCR
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-          docker pull ${IMAGE_NAME}:sha-${SHORT_SHA}
+          echo "Pulling $IMAGE_TAG..."
+          docker pull $IMAGE_TAG
 
+          # Tag the image for Heroku
+          docker tag $IMAGE_TAG registry.heroku.com/${{ vars.HEROKU_PROD_APP }}/web:latest
+         
           echo "Pushing to Heroku..."
-          docker tag ${IMAGE_NAME}:sha-${SHORT_SHA} registry.heroku.com/${{ vars.HEROKU_PROD_APP }}/web:latest
-
           heroku container:push web --app ${{ vars.HEROKU_PROD_APP }}
           
           echo "Releasing..."
