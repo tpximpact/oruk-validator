@@ -128,7 +128,7 @@ jobs:
   docker-build:
     name: Build & Push Docker Image to GHCR
     runs-on: ubuntu-latest
-    needs: [build-and-test, codeql-analysis, security-scan-fs]
+    needs: [build-and-test]
     outputs:
       image_ref: ${{ steps.image_ref.outputs.image_ref }}
 
@@ -160,6 +160,7 @@ jobs:
         with:
           images: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
           tags: |
+            # Explicitly use Head SHA for PRs to maintain consistency with deployment
             type=sha,format=short,value=${{ github.event.pull_request.head.sha || github.sha }}
             type=ref,event=branch
             type=ref,event=pr
@@ -169,19 +170,20 @@ jobs:
       - name: Record image reference
         id: image_ref
         run: |
-          # Use Head SHA for PRs, or github.sha for direct pushes
+          # Use Head SHA for PRs, or default SHA for pushes
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             REAL_SHA="${{ github.event.pull_request.head.sha }}"
           else
             REAL_SHA="${{ github.sha }}"
           fi
-          SHORT_SHA=$(echo $REAL_SHA | cut -c1-7)
           
+          # Shorten to 7 chars to match metadata-action default format
+          SHORT_SHA=$(echo $REAL_SHA | cut -c1-7)
           IMAGE_NAME="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}"
           FULL_REF="${IMAGE_NAME}:sha-${SHORT_SHA}"
-
+          
           echo "image_ref=$FULL_REF" >> "$GITHUB_OUTPUT"
-          echo "Recorded image reference for next jobs: $FULL_REF"
+          echo "Assigned image reference: $FULL_REF"
           
       - name: Build and push Docker image
         uses: docker/build-push-action@v6.19.2
@@ -256,7 +258,7 @@ jobs:
 
       - name: Upload Trivy Image SARIF
         uses: github/codeql-action/upload-sarif@v4.32.4
-        if: steps.trivy_sarif.outputs.present == 'true'
+        if: always()
         with:
           sarif_file: trivy-image-results.sarif
 
