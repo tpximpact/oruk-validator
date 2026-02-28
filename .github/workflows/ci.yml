@@ -150,18 +150,8 @@ jobs:
           tags: |
             # Explicitly use the same SHA as your manual Record step
             type=sha,format=short,prefix=sha-,value=${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Record image reference
-        id: image_ref
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            REAL_SHA="${{ github.event.pull_request.head.sha }}"
-          else
-            REAL_SHA="${{ github.sha }}"
-          fi
-          SHORT_SHA=$(echo $REAL_SHA | cut -c1-7)
-          IMAGE_NAME="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}"
-          echo "image_ref=${IMAGE_NAME}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6.19.2
         with:
           context: .
@@ -171,6 +161,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Record image reference with digest
+        id: image_ref
+        run: |
+          IMAGE_NAME="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}"
+          DIGEST="${{ steps.build.outputs.digest }}"
+          echo "image_ref=${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Image reference: ${IMAGE_NAME}@${DIGEST}"
+      - name: Verify image push
+        run: |
+          echo "Verifying image: ${{ steps.image_ref.outputs.image_ref }}"
+          docker pull ${{ steps.image_ref.outputs.image_ref }}
+          echo "✓ Image successfully pushed and pulled"
 
   # --- JOB 5: TRIVY IMAGE SCAN ---
   security-scan-image:
@@ -187,6 +189,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Trivy (image)
+        id: trivy_scan
         uses: aquasecurity/trivy-action@0.34.1
         continue-on-error: true
         with:
@@ -197,7 +200,7 @@ jobs:
 
       - name: Upload Trivy Image SARIF
         uses: github/codeql-action/upload-sarif@v4.32.4
-        if: always()
+        if: always() && hashFiles('trivy-image-results.sarif') != ''
         with:
           sarif_file: trivy-image-results.sarif
 
@@ -218,7 +221,21 @@ jobs:
       - name: Pull & Run Container
         run: |
           echo "Pulling image: ${{ needs.docker-build.outputs.image_ref }}"
-          docker pull ${{ needs.docker-build.outputs.image_ref }} || exit 1
+          # Retry logic for docker pull
+          for i in {1..3}; do
+            if docker pull ${{ needs.docker-build.outputs.image_ref }}; then
+              echo "✓ Image pulled successfully"
+              break
+            fi
+            if [ $i -eq 3 ]; then
+              echo "✗ Failed to pull image after 3 attempts"
+              echo "Checking if image exists in registry..."
+              docker manifest inspect ${{ needs.docker-build.outputs.image_ref }} || echo "Image not found in registry"
+              exit 1
+            fi
+            echo "Retry $i/3 - waiting 5 seconds..."
+            sleep 5
+          done
           docker network create zap-network
           docker run -d --name app --network zap-network -p 8080:80 ${{ needs.docker-build.outputs.image_ref }}
       - name: Wait for Application Ready
