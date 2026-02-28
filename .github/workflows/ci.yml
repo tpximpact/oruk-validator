@@ -89,11 +89,7 @@ jobs:
         uses: github/codeql-action/init@v4.32.4
         with:
           languages: ${{ matrix.language }}
-          build-mode: manual
-      - name: Build for CodeQL
-        run: |
-          dotnet restore OpenReferralApi.sln
-          dotnet build OpenReferralApi.sln --configuration Release --no-restore --verbosity normal
+          build-mode: autobuild
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4.32.4
 
@@ -255,9 +251,10 @@ jobs:
           done
       - name: Run ZAP Scan
         run: |
+          mkdir -p ${{ github.workspace }}/zap-reports
           docker run --rm --network zap-network -v ${{ github.workspace }}/zap-reports:/zap/wrk/:rw ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://app:80 -J report_json.json -I || true
       - name: Upload ZAP results
-        if: always()
+        if: always() && hashFiles('zap-reports/*') != ''
         uses: actions/upload-artifact@v6.0.0
         with:
           name: zap-scan-results
