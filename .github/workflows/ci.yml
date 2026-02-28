@@ -178,6 +178,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
       - name: Login to GHCR
         uses: docker/login-action@v3.7.0
         with:
@@ -215,7 +217,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Pull & Run Container
         run: |
-          docker pull ${{ needs.docker-build.outputs.image_ref }}
+          echo "Pulling image: ${{ needs.docker-build.outputs.image_ref }}"
+          docker pull ${{ needs.docker-build.outputs.image_ref }} || exit 1
           docker network create zap-network
           docker run -d --name app --network zap-network -p 8080:80 ${{ needs.docker-build.outputs.image_ref }}
       - name: Wait for Application Ready
