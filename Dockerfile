@@ -68,6 +68,10 @@ COPY --from=publish /app/publish .
 # Copy mocks (schemas are included in publish output if needed)
 COPY --from=publish /src/OpenReferralApi/Mocks ./Mocks
 
+# Create startup script for proper signal handling with dynamic PORT
+RUN echo '#!/bin/sh\nexport ASPNETCORE_URLS="http://*:${PORT:-80}"\nexec dotnet OpenReferralApi.dll "$@"' > /app/start.sh && \
+    chmod +x /app/start.sh
+
 # Set ownership to non-root user
 RUN chown -R appuser:appuser /app
 
@@ -77,10 +81,6 @@ USER appuser
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD curl -f http://localhost:${PORT:-80}/health-check/live || exit 1
 
-# Run the application
-# Note: Using shell form (not JSON array) to allow runtime $PORT variable expansion for Heroku.
-# This triggers a linter warning about signal handling, but is necessary for dynamic port binding.
-CMD ASPNETCORE_URLS=http://*:$PORT dotnet OpenReferralApi.dll
-
-# For local development use ENTRYPOINT & comment out CMD line
-# ENTRYPOINT ["dotnet", "OpenReferralApi.dll"]
+# Use JSON exec form for proper signal handling
+# The startup script ensures signals are propagated correctly and handles Heroku's dynamic $PORT
+ENTRYPOINT ["/app/start.sh"]

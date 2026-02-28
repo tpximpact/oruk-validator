@@ -1,7 +1,9 @@
-name: CI/CD Pipeline
+name: Unified CI/CD & Deployment
 
 on:
   pull_request:
+    branches: [staging, main]
+  push:
     branches: [staging, main]
 
 concurrency:
@@ -15,21 +17,21 @@ env:
   TRIVY_DOCKER_IMAGE: "aquasec/trivy:0.69.1"
 
 permissions:
-  contents: read
-  packages: write          # for pushing to GHCR
-  security-events: write   # for Trivy SARIF upload
+  contents: write
+  packages: write
+  security-events: write
   actions: read
 
 jobs:
+  # --- JOB 1: BUILD AND TEST ---
   build-and-test:
     name: Build and Test (.NET)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
 
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+      - name: Setup .NET
         uses: actions/setup-dotnet@v5.1.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -41,13 +43,12 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
           restore-keys: ${{ runner.os }}-nuget-
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - name: Restore & Build
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
 
-      - name: Build solution (Release)
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Run unit / integration tests
+      - name: Run Tests
         run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
 
       - name: Upload coverage to Codecov
@@ -64,53 +65,47 @@ jobs:
           path: ./coverage
           retention-days: 14
 
+  # --- JOB 2: CODEQL ---
   codeql-analysis:
     name: CodeQL Security Analysis (C#)
     runs-on: ubuntu-latest
     needs: build-and-test
     permissions:
       security-events: write
+      actions: read
       contents: read
-      packages: read
-
     strategy:
       fail-fast: false
       matrix:
         language: ['csharp']
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
-
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+      - name: Setup .NET
         uses: actions/setup-dotnet@v5.1.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4.32.4
         with:
           languages: ${{ matrix.language }}
-          build-mode: manual
-
-      - name: Build solution for CodeQL
+          build-mode: none
+      - name: Build for CodeQL
         run: |
           dotnet restore OpenReferralApi.sln
           dotnet build OpenReferralApi.sln --configuration Release --no-restore --verbosity normal
-      
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4.32.4
 
+  # --- JOB 3: TRIVY FS ---
   security-scan-fs:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
     needs: build-and-test
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
-
-      - name: Run Trivy (filesystem)
+      - name: Run Trivy (fs)
         uses: aquasecurity/trivy-action@0.34.1
         with:
           scan-type: 'fs'
@@ -118,67 +113,45 @@ jobs:
           format: 'sarif'
           output: 'trivy-fs-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM,UNKNOWN'
-
       - name: Upload Trivy FS SARIF
         uses: github/codeql-action/upload-sarif@v4.32.4
         if: always()
         with:
           sarif_file: trivy-fs-results.sarif
 
+  # --- JOB 4: DOCKER BUILD & PUSH ---
   docker-build:
     name: Build & Push Docker Image to GHCR
     runs-on: ubuntu-latest
-    needs: [build-and-test, codeql-analysis, security-scan-fs]
+    needs: [codeql-analysis, security-scan-fs]
     outputs:
       image_ref: ${{ steps.image_ref.outputs.image_ref }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.12.0
-
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Prepare lowercase image name
         id: lowercase
         run: |
-          repo_owner="${{ github.repository_owner }}"
-          repo_name="${{ github.event.repository.name }}"
-          echo "repo_owner=$(echo "$repo_owner" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-          echo "repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
+          echo "repo_owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "repo_name=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Extract Docker metadata & tags
         id: meta
         uses: docker/metadata-action@v5.10.0
         with:
           images: ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}
           tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Record image reference
-        id: image_ref
-        run: |
-          tags_raw="${{ steps.meta.outputs.tags }}"
-          image_ref=$(echo "$tags_raw" | tr ',' '\n' | grep ':sha-' | head -n 1)
-
-          if [ -z "$image_ref" ]; then
-            image_ref="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}:sha-${{ github.sha }}"
-          fi
-
-          echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Docker image
+            # Explicitly use the same SHA as your manual Record step
+            type=sha,format=short,prefix=sha-,value=${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build and push
+        id: build
         uses: docker/build-push-action@v6.19.2
         with:
           context: .
@@ -188,21 +161,35 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Record image reference with digest
+        id: image_ref
+        run: |
+          IMAGE_NAME="ghcr.io/${{ steps.lowercase.outputs.repo_owner }}/${{ steps.lowercase.outputs.repo_name }}"
+          DIGEST="${{ steps.build.outputs.digest }}"
+          echo "image_ref=${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Image reference: ${IMAGE_NAME}@${DIGEST}"
+      - name: Verify image push
+        run: |
+          echo "Verifying image: ${{ steps.image_ref.outputs.image_ref }}"
+          docker pull ${{ steps.image_ref.outputs.image_ref }}
+          echo "✓ Image successfully pushed and pulled"
 
+  # --- JOB 5: TRIVY IMAGE SCAN ---
   security-scan-image:
     name: Trivy Image Vulnerability Scan
     runs-on: ubuntu-latest
     needs: docker-build
-    
     steps:
-      - name: Login to GitHub Container Registry
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+      - name: Login to GHCR
         uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Trivy on built image
+      - name: Run Trivy (image)
+        id: trivy_scan
         uses: aquasecurity/trivy-action@0.34.1
         continue-on-error: true
         with:
@@ -211,121 +198,119 @@ jobs:
           output: 'trivy-image-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM,UNKNOWN'
 
-      - name: Diagnose missing Trivy SARIF
-        if: always()
-        run: |
-          if [ -f trivy-image-results.sarif ]; then
-            echo "Trivy SARIF present. No diagnostic scan needed."
-            exit 0
-          fi
-
-          echo "Trivy SARIF missing. Running diagnostic scan with debug output."
-          docker pull ${{ needs.docker-build.outputs.image_ref }}
-
-          docker run --rm ${{ env.TRIVY_DOCKER_IMAGE }} \
-            image \
-            --debug \
-            --exit-code 0 \
-            --format sarif \
-            --output trivy-image-results.sarif \
-            --severity CRITICAL,HIGH,MEDIUM,UNKNOWN \
-            ${{ needs.docker-build.outputs.image_ref }} || true
-
-          docker run --rm ${{ env.TRIVY_DOCKER_IMAGE }} \
-            image \
-            --debug \
-            --exit-code 0 \
-            --format table \
-            --severity CRITICAL,HIGH,MEDIUM,UNKNOWN \
-            ${{ needs.docker-build.outputs.image_ref }} || true
-
-      - name: Check Trivy SARIF exists
-        id: trivy_sarif
-        if: always()
-        run: |
-          if [ -f trivy-image-results.sarif ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Upload Trivy Image SARIF
         uses: github/codeql-action/upload-sarif@v4.32.4
-        if: steps.trivy_sarif.outputs.present == 'true'
+        if: always() && hashFiles('trivy-image-results.sarif') != ''
         with:
           sarif_file: trivy-image-results.sarif
 
+  # --- JOB 6: ZAP SCAN ---
   zap-scan:
     name: OWASP ZAP Baseline Scan
     runs-on: ubuntu-latest
-    needs: [docker-build]
-    
+    needs: docker-build
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
-
-      - name: Log in to GitHub Container Registry & pull image
+      - name: Login to GHCR
         uses: docker/login-action@v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull Docker image
-        run: docker pull ${{ needs.docker-build.outputs.image_ref }}
-
-      - name: Create Docker network
-        run: docker network create zap-test-network
-
-      - name: Start application container
+      - name: Pull & Run Container
         run: |
-          docker run -d --name test-app \
-            --network zap-test-network \
-            -p 8080:80 \
-            ${{ needs.docker-build.outputs.image_ref }}
-
-          # Wait for application to be ready
-          echo "Waiting for application to start..."
+          echo "Pulling image: ${{ needs.docker-build.outputs.image_ref }}"
+          # Retry logic for docker pull
+          for i in {1..3}; do
+            if docker pull ${{ needs.docker-build.outputs.image_ref }}; then
+              echo "✓ Image pulled successfully"
+              break
+            fi
+            if [ $i -eq 3 ]; then
+              echo "✗ Failed to pull image after 3 attempts"
+              echo "Checking if image exists in registry..."
+              docker manifest inspect ${{ needs.docker-build.outputs.image_ref }} || echo "Image not found in registry"
+              exit 1
+            fi
+            echo "Retry $i/3 - waiting 5 seconds..."
+            sleep 5
+          done
+          docker network create zap-network
+          docker run -d --name app --network zap-network -p 8080:80 ${{ needs.docker-build.outputs.image_ref }}
+      - name: Wait for Application Ready
+        run: |
           for i in {1..30}; do
             if curl -f http://localhost:8080/health-check/live > /dev/null 2>&1; then
-              echo "✓ Application health check passed (/health-check/live)"
+              echo "✓ Application health check passed"
               break
             fi
             if [ $i -eq 30 ]; then
-              echo "✗ Application failed to become ready after 60 seconds"
-              echo "Final container logs:"
-              docker logs test-app
+              echo "✗ Application failed to start"
+              docker logs app
               exit 1
             fi
-            echo "Waiting for application... ($i/30)"
+            echo "Waiting for app... ($i/30)"
             sleep 2
           done
-
-      - name: Run OWASP ZAP Baseline Scan
+      - name: Run ZAP Scan
         run: |
-          docker run --rm \
-            --network zap-test-network \
-            -v ${{ github.workspace }}/zap-reports:/zap/wrk/:rw \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-            -t http://test-app:80 \
-            -J report_json.json \
-            -w report_md.md \
-            -r report_html.html \
-            -I || echo "ZAP scan completed with findings"
-        continue-on-error: true
-
+          mkdir -p ${{ github.workspace }}/zap-reports
+          chmod 777 ${{ github.workspace }}/zap-reports
+          docker run --rm --network zap-network -v ${{ github.workspace }}/zap-reports:/zap/wrk/:rw ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://app:80 -J report_json.json -I || true
       - name: Upload ZAP results
-        if: always()
+        if: always() && hashFiles('zap-reports/*') != ''
         uses: actions/upload-artifact@v6.0.0
         with:
           name: zap-scan-results
           path: zap-reports/
-          if-no-files-found: warn
 
-      - name: Stop application container
-        if: always()
+  # --- JOB 7: DEPLOY STAGING ---
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [docker-build, security-scan-image, zap-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          IMAGE_TAG: ${{ needs.docker-build.outputs.image_ref }}
         run: |
-          docker stop test-app || true
-          docker rm test-app || true
-          docker network rm zap-test-network || true
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull $IMAGE_TAG
+          heroku container:login
+          docker tag $IMAGE_TAG registry.heroku.com/${{ vars.HEROKU_STAGING_APP }}/web:latest
+          heroku container:push web --app ${{ vars.HEROKU_STAGING_APP }}
+          heroku container:release web --app ${{ vars.HEROKU_STAGING_APP }}
+          sleep 12
+          curl --fail "${{ vars.STAGING_HEALTH_ENDPOINT }}" || echo "⚠️ Staging health check failed"
+
+  # --- JOB 8: DEPLOY PRODUCTION ---
+  deploy-production:
+    name: Deploy to Production
+    needs: [docker-build, security-scan-image, zap-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          IMAGE_TAG: ${{ needs.docker-build.outputs.image_ref }}
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull $IMAGE_TAG
+          heroku container:login
+          docker tag $IMAGE_TAG registry.heroku.com/${{ vars.HEROKU_PROD_APP }}/web:latest
+          heroku container:push web --app ${{ vars.HEROKU_PROD_APP }}
+          heroku container:release web --app ${{ vars.HEROKU_PROD_APP }}
+          sleep 12
+          curl --fail "${{ vars.HEALTH_ENDPOINT }}" || echo "⚠️ Production health check failed"
+      - name: Create Release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
