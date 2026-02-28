@@ -246,7 +246,7 @@ jobs:
   # --- JOB 7: DEPLOY STAGING ---
   deploy-staging:
     name: Deploy to Staging
-    needs: [security-scan-image, zap-scan]
+    needs: [docker-build, security-scan-image, zap-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     steps:
@@ -267,7 +267,7 @@ jobs:
   # --- JOB 8: DEPLOY PRODUCTION ---
   deploy-production:
     name: Deploy to Production
-    needs: [security-scan-image, zap-scan]
+    needs: [docker-build, security-scan-image, zap-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -288,4 +288,7 @@ jobs:
         uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
